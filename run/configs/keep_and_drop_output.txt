@@ -5,3 +5,7 @@ keep PV_npvs
 keep genWeight
 keep *LHE*Weight
 keep *PSWeight
+keep *DStarMeson*
+keep *DsMeson*
+keep *DZeroMeson*
+keep cFragmentation*

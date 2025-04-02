@@ -1,14 +1,19 @@
 #!/usr/bin/env python
 
+# external imports
+import os
+import sys
+import subprocess
+import json
+from pathlib import Path
 import ROOT
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 import argparse
 import yaml
-import json
-import os
-import sys
-from pathlib import Path
+
+# local imports
 import helpers
+
 
 ## parse arguments
 parser = argparse.ArgumentParser()
@@ -29,70 +34,80 @@ golden_json = {
     '2023BPix': 'Cert_Collisions2023_366442_370790_Golden.json'
 }
 
-## read samples yaml file and produce json file to be used by condor
+
 def create_metadata_json():
+    # write metadata json file
     
     dataset_type = args.type
     jobs_dir = "jobs_" + dataset_type + "_" + args.year
     year = args.year
     
-    ## read samples yaml file
-    samples_yaml_file = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoHc/run/samples/" + dataset_type + "_" + year + ".yaml"
+    # read samples yaml file
+    samples_yaml_file = (os.environ['CMSSW_BASE']
+      + "/src/PhysicsTools/HcNtuplizer/run/samples/"
+      + dataset_type + "_" + year + ".yaml")
+    print(f'Reading sample list {samples_yaml_file}')
     with open(samples_yaml_file, 'r') as file:
         samples = yaml.safe_load(file)
 
+    # find samples in listed sample file
     physics_processes = []
-    eras=[]
+    eras = []
     das_dict = {}
-    for sample in samples:        
+    print('Finding files...')
+    for sample in samples:
         das_dict[sample] = {}
         for dataset in samples[sample]:
-            ## find files using DAS
-            print("DAS query for dataset " + dataset)
-            das_query = 'dasgoclient --query="file dataset=' + dataset + '"'
-            query_out = os.popen(das_query)
-            files_found = ['root://xrootd-cms.infn.it/'+_file.strip() for _file in query_out]
-            physics_process = dataset.split("/")[1]
-            physics_processes.append(physics_process)
+            
+            # find files
+            if os.path.exists(dataset):
+                # list local files
+                print(f'  - Finding files in local dataset {dataset}...')
+                physics_process = dataset.split("/")[-1].split("_Run")[0] # to improve
+                physics_processes.append(physics_process)
+                files_found = [os.path.join(dataset, f) for f in os.listdir(dataset) if f.endswith('.root')]
+            else:
+                # find files using DAS
+                print(f'  - Finding files in remote dataset {dataset} with DAS...')
+                das_query = 'dasgoclient --query="file dataset=' + dataset + '"'
+                query_out = os.popen(das_query)
+                files_found = ['root://xrootd-cms.infn.it/'+_file.strip() for _file in query_out]
+                physics_process = dataset.split("/")[1]
+                physics_processes.append(physics_process)
+            
+            # printouts for logging
+            print(f'    Found {len(files_found)} files, physics process: {physics_process}.')
+
+            #  add to structure   
             if dataset_type == "data":
+                # special settings for data
                 era = dataset.split("/")[2]
                 eras.append(era)
-
-            #das_dict[sample][physics_process] = files_found
-                # Ensure the dictionary structure exists
-    
                 if physics_process not in das_dict[sample]:
-                    das_dict[sample][physics_process] = {}  # Initialize as an empty dictionary
-
+                    das_dict[sample][physics_process] = {}
                 if era not in das_dict[sample][physics_process]:
-                    das_dict[sample][physics_process][era] = []  # Initialize as a list
-
+                    das_dict[sample][physics_process][era] = []
                 das_dict[sample][physics_process][era].extend(files_found)
-
-                print(f"{len(files_found)} files found")
             else:
+                # special settings for mc
                 if physics_process not in das_dict[sample]:
-                    das_dict[sample][physics_process] = []  # Initialize as a list
+                    das_dict[sample][physics_process] = []
                 das_dict[sample][physics_process].extend(files_found)
-                print(f"{len(files_found)} files found")
 
-                                    
-    ## write json file
+    # write metadata json file
     json_file = jobs_dir + '/metadata.json'
     json_content = {}
-    
     json_content["output_dir"] = args.output
     json_content["jobs_dir"] = args.jobs_dir
     json_content["year"] = args.year    
     json_content["type"] = dataset_type
     if dataset_type == "data":  
-        json_content["golden_json"] = os.environ['CMSSW_BASE'] + "/src/PhysicsTools/NanoHc/data/JSON/" + golden_json[args.year]
-    else:
-        json_content["golden_json"] = None
+        json_content["golden_json"] = (os.environ['CMSSW_BASE']
+          + "/src/PhysicsTools/HcNtuplizer/data/JSON/" + golden_json[args.year])
+    else: json_content["golden_json"] = None
     json_content["sample_names"] = []
     json_content["physics_processes"] = []
-    if dataset_type == "data": 
-        json_content["eras"] = []
+    if dataset_type == "data": json_content["eras"] = []
     json_content["jobs"] = []
         
     for sample_name in samples: json_content["sample_names"].append(sample_name)
@@ -106,18 +121,28 @@ def create_metadata_json():
             for physics_process in das_dict[sample]:
                 for era in das_dict[sample][physics_process]:
                     for chunk in enumerate(helpers.get_chunks(das_dict[sample][physics_process][era],args.n)):
-                        json_content["jobs"].append({"job_id": job_id, "input_files": chunk[1], "sample_name": sample ,"physics_process": physics_process, "era": era })
+                        json_content["jobs"].append({
+                          "job_id": job_id,
+                          "input_files": chunk[1],
+                          "sample_name": sample,
+                          "physics_process": physics_process,
+                          "era": era })
                         job_id += 1
     else:
         for sample in samples:
             for physics_process in das_dict[sample]:
                 for chunk in enumerate(helpers.get_chunks(das_dict[sample][physics_process],args.n)):
-                    json_content["jobs"].append({"job_id": job_id, "input_files": chunk[1], "sample_name": sample ,"physics_process": physics_process})
+                    json_content["jobs"].append({
+                      "job_id": job_id,
+                      "input_files": chunk[1],
+                      "sample_name": sample,
+                      "physics_process": physics_process})
                     job_id += 1
 
     with open(json_file, 'w') as file:
         json.dump(json_content, file, indent=4)
         
+
 def write_condor_submit(jobids_file):
     
     cmssw_base = os.environ['CMSSW_BASE']
@@ -306,11 +331,6 @@ def run_add_weights():
             final_merged_file = process_files[0]  # If only one file, it's already final
             print(f"Only one file for {sample}, no need to merge.")
 
-import os
-import subprocess
-import json
-from pathlib import Path
-
 def merge_output_files():
     """ Merges all weighted_tree.root files per sample into one final ROOT file in the merged/ directory. """
 
@@ -435,11 +455,14 @@ def resubmit():
 
     # Pass the correct absolute path to write_condor_submit
     write_condor_submit(jobids_file=jobids_file)
+
 def main():
 
+    # set name for jobs directory
     jobs_dir = "jobs_" + args.type + "_" + args.year
     args.jobs_dir = jobs_dir
 
+    # handle special cases
     if args.resubmit:
         resubmit()
         sys.exit(0)
@@ -449,27 +472,27 @@ def main():
         sys.exit(0)
    
     if args.post:
-        # run_add_weights()
         merge_output_files()
         sys.exit(0)   
-        
+    
+    # check output directory 
     helpers.check_if_dir_exists(jobs_dir)
     helpers.check_if_dir_exists(args.output)
-
     print("Will write output trees to " + args.output)
     print("Number of files per job: " + str(args.n))
     
-    ## create necessary dirs
+    # create necessary dirs
     os.system("mkdir -p " + jobs_dir + "/log/")
     
-    ## copy necessary files to jobs dir
-    os.system("cp static_files/processor.py " + jobs_dir)
-    os.system("cp static_files/keep_and_drop*.txt " + jobs_dir)
-    os.system("cp static_files/condor_exec.sh " + jobs_dir)
+    # copy necessary files to jobs dir
+    os.system("cp configs/processor.py " + jobs_dir)
+    os.system("cp configs/keep_and_drop*.txt " + jobs_dir)
+    os.system("cp configs/condor_exec.sh " + jobs_dir)
     
-    ## create metadata json and condor submit files in the jobs dir
+    # create metadata json and condor submit files in the jobs dir
     create_metadata_json()
     create_condor_submit()
+
 
 if __name__ == "__main__":
     main()

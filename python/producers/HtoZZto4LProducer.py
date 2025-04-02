@@ -1,18 +1,34 @@
-from PhysicsTools.NanoAODTools.postprocessing.framework.datamodel import Collection
-from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
-# from ..helpers.triggerHelper import passTrigger
+# Main analyzer for H -> ZZ -> 4L decays
+
+
+# external imports
+import os
+import sys
+import json
 import ROOT
 import math
 import itertools
 from functools import cmp_to_key
-from ..helpers.utils import sumP4
 ROOT.PyConfig.IgnoreCommandLineOptions = True
 
-lumi_dict = {"2022": 7.98, "2022EE": 26.67, "2023": 17.794, "2023BPix": 9.451}
+# NanoAODTools imports
+from PhysicsTools.NanoAODTools.postprocessing.framework.datamodel import Collection
+from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
+
+# local imports
+from ..helpers.utils import sumP4
+
+# load lumi dict
+thisdir = os.path.abspath(os.path.dirname(__file__))
+topdir = os.path.abspath(os.path.join(thisdir, '../..'))
+datadir = os.path.abspath(os.path.join(topdir, 'data'))
+lumi_file = os.path.join(datadir, 'lumi/lumi.json')
+with open(lumi_file, 'r') as f: lumi_dict = json.load(f)
+
 
 class Zcandidate:
     
-    def __init__(self,lep1,lep2):
+    def __init__(self, lep1, lep2):
         self.lep1 = lep1
         self.lep2 = lep2
         self.pt = sumP4(self.lep1, self.lep2).Pt()
@@ -29,16 +45,22 @@ class ZZcandidate:
         self.eta = sumP4(self.Z1, self.Z2).Eta()
         self.phi = sumP4(self.Z1, self.Z2).Phi()
         self.mass = sumP4(self.Z1, self.Z2).M()
-        self.mass2 = sumP4(self.Z1, self.Z2).M()
+        #self.mass2 = sumP4(self.Z1, self.Z2).M() seems to be a bug? to see if it is used anywhere...
 
-class BaselineProducer(Module):
+class HtoZZto4LProducer(Module):
     
     def __init__(self, year, dataset_type, sample):
+        
+        # copy and check provided arguments
         self.year = year
         self.sample = sample
         self.dataset_type = dataset_type
+        allowed_dtypes = ['mc', 'data']
+        if self.dataset_type not in allowed_dtypes:
+            raise Exception(f'Data type not recognized: {self.dataset_type}.')
+        self.isMC = True if self.dataset_type == 'mc' else False
 
-        # Define the variables you want to plot
+        # define the variables to add to the output tree
         self.lep_vars = ["pt","eta","phi", "pdgId"]
         self.jet_vars = ["pt","eta","phi","mass","bdisc","cvbdisc","cvldisc","gvudsdisc"]
         self.jet_vars_mc = ["hadronFlavour"]
@@ -52,7 +74,7 @@ class BaselineProducer(Module):
         self.ZZ4mu_vars=["pt","eta","phi","mass"]
         self.ZZ2e2mu_vars=["pt","eta","phi","mass"]
 
-        # Define the prefixes
+        # define the prefixes
         self.mu_prefix = "mu_"
         self.el_prefix = "el_"
         self.lep_prefix = "lep_"
@@ -74,24 +96,24 @@ class BaselineProducer(Module):
         pass
 
     def beginFile(self, inputFile, outputFile, inputTree, wrappedOutputTree):
-        self.isMC = True if self.dataset_type == "mc" else False
         
+        # set output tree
         self.out = wrappedOutputTree
         
-        # Define lepton branches
+        # define lepton branches
         for lep_var in self.lep_vars:
             self.out.branch(self.mu_prefix + lep_var, "F", 20, lenVar="nMu")
             self.out.branch(self.el_prefix + lep_var, "F", 20, lenVar="nEl")
             self.out.branch(self.lep_prefix + lep_var, "F", 20, lenVar="nLep")
         
-        # Define jet branches
+        # define jet branches
         for jet_var in self.jet_vars:
             self.out.branch(self.jet_prefix + jet_var, "F", 20, lenVar="nJet")
         if self.isMC: 
             for jet_var in self.jet_vars_mc:
                 self.out.branch(self.jet_prefix + jet_var, "F", 20, lenVar="nJet")
         
-        # Define trigger branches
+        # define trigger branches
         self.out.branch("HLT_passZZ4lEle", "O")   # pass Ele triggers
         self.out.branch("HLT_passZZ4lMu", "O")    # pass Muon triggers
         self.out.branch("HLT_passZZ4lMuEle", "O") # pass MuEle triggers
@@ -100,11 +122,11 @@ class BaselineProducer(Module):
         # Define luminosity branch
         self.out.branch("lumiwgt", "F")
 
-        # Define branches for the Zcandidates
+        # Define branches for the Z candidates
         for Z_var in self.Z_vars:
             self.out.branch(self.Z_prefix + Z_var, "F", 20, lenVar="nZ")
 
-        # Define branches for the ZZcandidates
+        # Define branches for the ZZ candidates
         for ZZ_var in self.ZZ_vars:
             self.out.branch(self.ZZ_prefix + ZZ_var, "F", 20, lenVar="nZZ")
 
@@ -117,7 +139,7 @@ class BaselineProducer(Module):
         for ZZ2e2mu_var in self.ZZ2e2mu_vars:
             self.out.branch(self.ZZ2e2mu_prefix + ZZ2e2mu_var, "F", 20, lenVar="nZZ2e2mu")
 
-        # Define branches for the Hcandidates
+        # Define branches for the H candidates
         for H_var in self.H_vars:
             self.out.branch(self.H_prefix + H_var, "F", 20, lenVar="nH")
 
@@ -134,53 +156,64 @@ class BaselineProducer(Module):
         pass
 
     def analyze(self, event):
-        """process event, return True (go to next module) or False (fail, go to next event)"""
+        '''
+        Analyze a single event.
+        Note: if returns False, the rest of the event is skipped;
+              if returns True, continues to the next analyzer for the same event.
+        '''
 
+        # skip event if no good primary vertices are found
         if event.PV_npvsGood < 1: return False
 
-        # # apply trigger selections on data
-        # if not self.isMC: 
-        #     if self._select_triggers(event) is False:
-        #         return False
+        # apply trigger selection
+        if self._select_triggers(event) is False: return False
 
-        # Apply trigger selections on trigger and data
-        if self._select_triggers(event) is False:
-            return False
-
+        # select good muon and electron candidates
         self._select_muons(event)
         self._select_electrons(event)  
         event.selectedLeptons = event.selectedMuons + event.selectedElectrons
         if len(event.selectedLeptons) < 4: return False
 
+        # select good jet candidates
         self._select_jets(event)
-        # if len(event.selectedJets) == 0:
-        #     return False
-        
+
+        # select good Z candidates 
         self._select_Z_candidates(event)
-        if len(event.Zcandidates) < 2:
-            return False
+        if len(event.Zcandidates) < 2: return False
         
+        # select ZZ and H candidates
         self._select_ZZ_candidates(event)
-        
         self._select_H_candidates(event)
         
+        # fill all event info to the output tree
         self._fill_event_info(event)
-
         return True
-        
+
+
     def _select_triggers(self, event):
 
         passTrigger = False 
         out_data = {}
-        if self.year == "2022" or self.year == "2022EE" : # Checked that these are unprescaled in run 359751
-            passSingleEle = event.HLT_Ele30_WPTight_Gsf #Note: we used Ele32 in 2018! 
+        if self.year == "2022" or self.year == "2022EE" :
+            # (note: checked that these are unprescaled in run 359751)
+            passSingleEle = event.HLT_Ele30_WPTight_Gsf
             passSingleMu = event.HLT_IsoMu24
-            passDiEle = event.HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL or event.HLT_DoubleEle25_CaloIdL_MW
+            passDiEle = (event.HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL
+                         or event.HLT_DoubleEle25_CaloIdL_MW)
             passDiMu = event.HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass3p8
-            passMuEle = event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL or event.HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ or event.HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ or event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ or event.HLT_DiMu9_Ele9_CaloIdL_TrackIdL_DZ or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL_DZ
+            passMuEle = (event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL
+                         or event.HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ
+                         or event.HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ
+                         or event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ
+                         or event.HLT_DiMu9_Ele9_CaloIdL_TrackIdL_DZ
+                         or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL_DZ)
             passTriEle = False
             passTriMu = event.HLT_TripleMu_10_5_5_DZ or event.HLT_TripleMu_12_10_5
-        elif self.year == "2023" or self.year == "2023BPix" : # Checked that these are unprescaled, reference twikis for 2023 Eg & Muon Triggers https://twiki.cern.ch/twiki/bin/view/CMS/EgHLTRunIIISummary & https://twiki.cern.ch/twiki/bin/view/CMS/MuonHLT2023
+        elif self.year == "2023" or self.year == "2023BPix" :
+            # note: checked that these are unprescaled.
+            # reference twikis:
+            # - https://twiki.cern.ch/twiki/bin/view/CMS/EgHLTRunIIISummary
+            # - https://twiki.cern.ch/twiki/bin/view/CMS/MuonHLT2023
             passSingleEle = event.HLT_Ele30_WPTight_Gsf
             passSingleMu = event.HLT_IsoMu24
             passDiEle = event.HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL
@@ -191,23 +224,20 @@ class BaselineProducer(Module):
         else:
             print(f"Year {self.year} not found")
 
-
         if self.isMC or self.sample == "any" :
-            passTrigger = passDiEle or passDiMu or passMuEle or passTriEle or passTriMu or passSingleEle or passSingleMu
-        else: # Data: ensure each event is taken only from a single sample
-            if self.sample == "" : sys.exit("ERROR: sample must be set in data") # we may want to merge triggers for test runs 
-            if (self.sample in ["DoubleEle", "DoubleEG", "EGamma"] and (passDiEle or passTriEle)) or \
-            (self.sample in ["Muon", "DoubleMu", "DoubleMuon"] and (passDiMu or passTriMu) and not passDiEle and not passTriEle) or \
-            (self.sample in ["MuEG", "MuonEG"] and passMuEle and not passDiEle and not passTriEle and not passDiMu and not passTriMu) or \
-            (self.sample in ["SingleElectron", "EGamma"] and passSingleEle and not passMuEle and not passDiMu and not passTriMu and not passDiEle and not passTriEle) or \
-            (self.sample in ["SingleMuon", "Muon"] and passSingleMu and not passSingleEle and not passMuEle and not passDiMu and not passTriMu and not passDiEle and not passTriEle):
+            passTrigger = (passDiEle or passDiMu or passMuEle or
+                           passTriEle or passTriMu
+                           or passSingleEle or passSingleMu)
+        else:
+            # note: for data it is important to ensure that each event is taken only
+            #       from a single primary dataset (called "sample" here).
+            if self.sample == "" : raise Exception("Sample must be set in data")
+            if (self.sample in ["DoubleEle", "DoubleEG", "EGamma"] and (passDiEle or passTriEle)) \
+               or (self.sample in ["Muon", "DoubleMu", "DoubleMuon"] and (passDiMu or passTriMu) and not passDiEle and not passTriEle) \
+               or (self.sample in ["MuEG", "MuonEG"] and passMuEle and not passDiEle and not passTriEle and not passDiMu and not passTriMu) \
+               or (self.sample in ["SingleElectron", "EGamma"] and passSingleEle and not passMuEle and not passDiMu and not passTriMu and not passDiEle and not passTriEle) \
+               or (self.sample in ["SingleMuon", "Muon"] and passSingleMu and not passSingleEle and not passMuEle and not passDiMu and not passTriMu and not passDiEle and not passTriEle):
                 passTrigger = True
-
-        # if not out_data['passTriggers']:
-        #     return False
-
-        # for key in out_data:
-        #     self.out.fillBranch(key, out_data[key])
 
         self.out.fillBranch("HLT_passZZ4lEle", passSingleEle or passDiEle or passTriEle)
         self.out.fillBranch("HLT_passZZ4lMu", passSingleMu or passDiMu or passTriMu)
@@ -216,200 +246,160 @@ class BaselineProducer(Module):
 
         return passTrigger
 
+
     def _select_Z_candidates(self, event):
 
         event.Zcandidates = []
         
-        # mva_leptons = [lepton for lepton in event.selectedLeptons if lepton.mvaTOP > 0.9]
-        # lepton_pairs = list(itertools.combinations(mva_leptons, 2))
+        # loop over all pairs of leptons
         lepton_pairs = list(itertools.combinations(event.selectedLeptons, 2))
-        
         for lepton_pair in lepton_pairs:
             
-            # we need same flavor and opposite charge
-            if (lepton_pair[0].pdgId + lepton_pair[1].pdgId) != 0:
-                continue
+            # select same flavor and opposite charge
+            if (lepton_pair[0].pdgId + lepton_pair[1].pdgId) != 0: continue
             
-            # let's put negative charged lepton always as lep1 (useful later)
+            # put negative charged lepton always as lep1 (useful later)
             lep1, lep2 = (lepton_pair[0], lepton_pair[1]) if lepton_pair[0].pdgId < 0 else (lepton_pair[1], lepton_pair[0])
-                        
+            
+            # build Z candidate
             Zcand = Zcandidate(lep1,lep2)
             
-            if Zcand.mass < 12 or Zcand.mass > 120:
-                continue
+            # apply (loose) mass window
+            if Zcand.mass < 12 or Zcand.mass > 120: continue
         
+            # add Z candidate to collection
             event.Zcandidates.append(Zcand)
 
+
     def _flag_onshell_and_offshell_Z(self, Zcand_pair):
-                    
+        # determine which of both Z candidates is on-shell, and which is off-shell
+        # (based on which |mZcandidate - mZ| is the smallest) 
         Z1 = Zcand_pair[0]
-        Z2 = Zcand_pair[1]
-        
+        Z2 = Zcand_pair[1]        
         mZ = 91.1876
-        
-        ## minimal |mZcandidate - mZ| is considered on-shell
         d_mZ1_mZ = abs( Z1.mass - mZ )
         d_mZ2_mZ = abs( Z2.mass - mZ )
         onshell_idx = 0 if d_mZ1_mZ < d_mZ2_mZ else 1
         offshell_idx = 1 if d_mZ1_mZ < d_mZ2_mZ else 0
-        
         Zcand_pair[onshell_idx].is_onshell = True
         Zcand_pair[offshell_idx].is_onshell = False
-                
+        
+        
     def _select_ZZ_candidates(self, event):
         
         event.ZZcandidates = []
-                
+        mZ = 91.1876
+
+        # loop over pairs of Z candidates                
         Zcand_pairs = list(itertools.combinations(event.Zcandidates, 2))
         for Zcand_pair in Zcand_pairs:
-                        
+            
+            # determine which one is on-shell and which one is off-shell,
+            # and put the on-shell one first.
+            # (in other words, put the one with smallest |mZcandidate - mZ| first)
             self._flag_onshell_and_offshell_Z(Zcand_pair) 
-            Z1, Z2 = (Zcand_pair[0], Zcand_pair[1]) if Zcand_pair[0].is_onshell else (Zcand_pair[1], Zcand_pair[0]) # by definition Z1 onshell, Z2 offshell
-   
+            Z1, Z2 = (Zcand_pair[0], Zcand_pair[1]) if Zcand_pair[0].is_onshell else (Zcand_pair[1], Zcand_pair[0])
+  
+            # apply mass cut on on-shell Z candidate 
             if Z1.mass < 40: continue  
             
             leptons = [Z1.lep1, Z1.lep2, Z2.lep1, Z2.lep2] 
             
-            ## two DISTINCT leptons must pass pt > 10 and pt > 20
-            # at_least_one_passed_pt20 = False
-            # at_least_one_passed_pt10 = False
-            # for lep in leptons:
-            #     if lep.pt > 20: at_least_one_passed_pt20 = True
-            #     elif lep.pt > 10: at_least_one_passed_pt10 = True
-            # if not (at_least_one_passed_pt10 and at_least_one_passed_pt20): continue
-
-            # Two DISTINCT leptons must pass pt > 10 and pt > 20
+            # two distinct leptons must pass pt > 10 and pt > 20
             num_passed_pt20 = 0
             num_passed_pt10 = 0
-
             for lep in leptons:
-                if lep.pt > 20:
-                    num_passed_pt20 += 1
-                elif lep.pt > 10:
-                    num_passed_pt10 += 1
+                if lep.pt > 20: num_passed_pt20 += 1
+                elif lep.pt > 10: num_passed_pt10 += 1
+            if num_passed_pt20 == 0 or (num_passed_pt10 + num_passed_pt20) < 2: continue
 
-            # Ensure we have at least one lepton passing each threshold, and they are distinct
-            if num_passed_pt20 == 0 or (num_passed_pt10 + num_passed_pt20) < 2: continue 
-            
-            lepton_pairs = list(itertools.combinations(leptons, 2)) # 6 combinations
-            
+            # loop over all pairs of leptons that make the two Z candidates 
+            lepton_pairs = list(itertools.combinations(leptons, 2))
             dr_ll_values = [] # between each of the four leptons (Ghost removal: all pairs)
             m_ll_values = [] # between each of the four leptons (QCD suppression: opposite-sign pairs and same flavour)                     
             for lepton_pair in lepton_pairs:
                 lep1 = lepton_pair[0]
                 lep2 = lepton_pair[1]
-                            
                 dr = math.sqrt( (lep1.eta - lep2.eta)**2 + (lep1.phi - lep2.phi)**2 ) 
                 dr_ll_values.append(dr)
-                
                 if (lep1.pdgId + lep2.pdgId) == 0:
                     m_ll = sumP4(lep1, lep2).M()
                     m_ll_values.append(m_ll)
-                    
             if any(dr < 0.02 for dr in dr_ll_values): continue
             if any(m_ll < 4 for m_ll in m_ll_values): continue
             
-            ## smart cut: check alternative pairing (4e or 4mu)
+            # check alternative pairing (4e or 4mu)
             if abs(Z1.lep1.pdgId) == abs(Z1.lep2.pdgId) == abs(Z2.lep1.pdgId) == abs(Z2.lep2.pdgId):
 
-                ## define Za as the one closest to Z mass, and Zb as the other pair
+                # define Za as the one closest to Z mass, and Zb as the other pair
                 Ztemp1 = Zcandidate(Z1.lep1, Z2.lep2)
                 Ztemp2 = Zcandidate(Z2.lep1, Z1.lep2)
-
-                mZ = 91.1876
                 Za, Zb = (Ztemp1, Ztemp2) if ( abs(Ztemp1.mass - mZ) < abs(Ztemp2.mass - mZ) ) else (Ztemp2, Ztemp1)
                                 
-                ## reject if |mZa - mZ| < |mZ1 - mZ| and mZb < 12
+                # reject if |mZa - mZ| < |mZ1 - mZ| and mZb < 12
                 if ( abs(Za.mass - mZ) < abs(Z1.mass - mZ) ) and Zb.mass < 12: continue
 
-            ## reject if inv mass of 4-lepton system < 70            
+            # reject if inv mass of 4-lepton system < 70            
             m_4l = sumP4(Z1.lep1, Z1.lep2, Z2.lep1, Z2.lep2).M()
             if m_4l < 70: continue
-             # ## reject if inv mass of 4-lepton system < 105             
-            # if m_4l < 105: continue
-
-            # ## reject if inv mass of 4-lepton system > 140
-            # if m_4l > 140: continue
-                
+            
+            # add result to collection 
             ZZcand = ZZcandidate(Z1,Z2)
             event.ZZcandidates.append(ZZcand)      
             
+
     def _select_H_candidates(self, event):
+        # pick the best H candidate from a set of ZZ candidates
+
+        mZ = 91.1876
         
         def best_candidate_comparator(a, b):
-            if abs(a.Z1.mass - b.Z1.mass) < 1e-4 : # If Z1 masses are similar, compare Z2 sum of transverse momenta
-                if a.Z2.lep1.pt + a.Z2.lep2.pt > b.Z2.lep1.pt + b.Z2.lep2.pt:
-                    return -1  # a is better
-                else:
-                    return 1   # b is better
+            # note: return -1 means a is better;
+            #       return 1 means b is better.
+            if abs(a.Z1.mass - b.Z1.mass) < 1e-4 :
+                if a.Z2.lep1.pt + a.Z2.lep2.pt > b.Z2.lep1.pt + b.Z2.lep2.pt: return -1
+                else: return 1
             else:
-                if abs(a.Z1.mass - 91.1876) < abs(b.Z1.mass - 91.1876):
-                    return -1  # a is better
-                else:
-                    return 1   # b is better
+                if abs(a.Z1.mass - 91.1876) < abs(b.Z1.mass - 91.1876): return -1
+                else: return 1
 
         event.Hcandidates = []
-
-        if len(event.ZZcandidates) == 0:
-            return
-        ##---------------------
-        ## Comparator
+        if len(event.ZZcandidates) == 0: return
         best_candidate = min(event.ZZcandidates, key=cmp_to_key(best_candidate_comparator))
         event.Hcandidates.append(best_candidate)
 
-
-        # mZ = 91.1876
-    
-        # # Filter ZZ candidates within Higgs mass window
-        # valid_ZZ_candidates = []
-        # for ZZcand in event.ZZcandidates:
-        #     # if 105 <= ZZcand.mass <= 140:
-        #     valid_ZZ_candidates.append(ZZcand)
-        
-        # if not valid_ZZ_candidates:
-        #     return  # No valid Higgs candidate found
-        # else:
-        #     if 
-        #     best_candidate = min(
-        #         valid_ZZ_candidates,
-        #         key=lambda ZZcand: abs(ZZcand.Z1.mass - mZ) 
-        #     )
-
-        # event.Hcandidates.append(best_candidate)
-
-    
-
-            
         
     ## taken from here https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/nanoZZ4lAnalysis.py    
     def _select_muons(self, event):
 
         event.selectedMuons = []
-
         muons = Collection(event, "Muon")
-        
         for mu in muons:
             
-            passMuID = mu.isPFcand or (mu.highPtId>0 and mu.pt>200)
-            
-            if mu.pt > 5 and abs(mu.eta) < 2.4 and mu.dxy < 0.5 and mu.dz < 1 and abs(mu.sip3d) < 4 and mu.pfRelIso03_all < 0.35 and passMuID and (mu.isGlobal or (mu.isTracker and mu.nStations>0)):
+            passMuID = mu.isPFcand or (mu.highPtId > 0 and mu.pt > 200)
+            if( mu.pt > 5 and abs(mu.eta) < 2.4
+                and mu.dxy < 0.5 and mu.dz < 1
+                and abs(mu.sip3d) < 4 and mu.pfRelIso03_all < 0.35
+                and passMuID and (mu.isGlobal or (mu.isTracker and mu.nStations > 0)) ):
                 mu._wp_ID = 'TightID'
                 mu._wp_Iso = 'LoosePFIso'
                 event.selectedMuons.append(mu)
             
+
     ## taken from here https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/nanoZZ4lAnalysis.py       
     def _select_electrons(self, event):
 
         event.selectedElectrons = []
-
         electrons = Collection(event, "Electron")
-        
         for el in electrons:
             el.etaSC = el.eta + el.deltaEtaSC
-            if el.pt > 7 and abs(el.eta) < 2.5 and el.dxy < 0.5 and el.dz < 1 and abs(el.sip3d) < 4:
+            if( el.pt > 7 and abs(el.eta) < 2.5
+                and el.dxy < 0.5 and el.dz < 1
+                and abs(el.sip3d) < 4 ):
                 el._wp_ID = 'wp90iso'
                 
                 ## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
+                # todo: check if this is still needed and if there isn't a cleaner solution
                 if abs(el.etaSC) < 0.8:
                     if el.pt < 10:
                         if el.mvaIso < 0.9044286167: continue
@@ -428,35 +418,35 @@ class BaselineProducer(Module):
                                     
                 event.selectedElectrons.append(el)
 
+
     def _select_jets(self, event):
 
         event.selectedJets = []
-
         jets = Collection(event, "Jet")
         FsrPhotons = Collection(event, "FsrPhoton")
 
         for jet in jets:
-            if jet.pt <= 20 or abs(jet.eta) >= 2.5:
-                continue
+
+            # basic kinematic selection
+            if( jet.pt <= 20 or abs(jet.eta) >= 2.5 ): continue
             
+            # skip jet if it overlaps with selected leptons
             jet_isolated = True
             for lep in event.selectedLeptons:
                 dR_jet_lep = math.sqrt( (lep.eta - jet.eta)**2 + (lep.phi - jet.phi)**2 ) 
-                if dR_jet_lep <= 0.4:
-                    jet_isolated = False
-            if not jet_isolated:
-                continue
-                    
+                if dR_jet_lep <= 0.4: jet_isolated = False
+            if not jet_isolated: continue
+            
+            # skip jet if it overlaps with FSR photons
             photon_isolated = True
             for photon in FsrPhotons:
                 dR_jet_photon = math.sqrt( (photon.eta - jet.eta)**2 + (photon.phi - jet.phi)**2 ) 
-                if dR_jet_photon <= 0.4:
-                    photon_isolated = False
-            if not photon_isolated:
-                continue                   
+                if dR_jet_photon <= 0.4: photon_isolated = False
+            if not photon_isolated: continue                   
             
             event.selectedJets.append(jet)
         
+
     def _fill_event_info(self, event):
         out_data = {}
         
