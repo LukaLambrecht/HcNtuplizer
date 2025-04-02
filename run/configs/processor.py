@@ -55,7 +55,7 @@ p = PostProcessor(
     inputFiles = files, 
     modules=[
         JetVMAPProducer(year,dataset_type),
-        #jetJERCProducer(year, era_data, dataset_type), # need Rho variables (removed in current custom nanoaod?)
+        jetJERCProducer(year, era_data, dataset_type),
         eleScaleRes(year, dataset_type),
         #muonScaleRes(year, dataset_type), # unresolved symbol lookup error
         HtoZZto4LProducer(year, dataset_type, sample),
