@@ -116,7 +116,8 @@ def create_metadata_json():
     for physics_process in physics_processes: json_content["physics_processes"].append(physics_process)
     if dataset_type == "data":
         for era in eras: json_content["eras"].append(era)
-    
+
+    # loop over samples, make chunks, and write job info    
     job_id = 0
     if dataset_type == "data":
         for sample in samples:
@@ -149,7 +150,9 @@ def create_metadata_json():
         
 
 def write_condor_submit(jobids_file):
-    
+    '''
+    Create the submit.sh file in the job directory
+    '''
     cmssw_base = os.environ['CMSSW_BASE']
     jobs_dir_path =os.getcwd() + "/" + args.jobs_dir 
     
@@ -173,15 +176,19 @@ queue jobid from ''' + jobids_file)
 
     condor_submit_file.close()
 
+
 def create_condor_submit():
-    
-    ## get job ids from json
+    '''
+    Get number of jobs from metadata.json,
+    and write job_ids.txt and submit.sh in the job directory
+    '''    
+    # get job ids from json
     with open(args.jobs_dir + "/metadata.json", 'r') as file:
         data = json.load(file)  
     njobs = len(data["jobs"])
     jobs_list = [i for i in range(njobs)]
     
-    ## write job ids to txt file
+    # write job ids to txt file
     with open(args.jobs_dir + "/job_ids.txt", 'w') as file:
         for index, item in enumerate(jobs_list):
             if index < len(jobs_list) - 1:
@@ -189,13 +196,9 @@ def create_condor_submit():
             else:
                 file.write(str(item))
     
+    # write submit.sh
     write_condor_submit(jobids_file="job_ids.txt")
 
-import os
-import subprocess
-import json
-from pathlib import Path
-import ROOT
 
 def parse_sample_xsec(cfgfile):
     """ Parses the cross-section file and returns a dictionary. """
@@ -233,6 +236,7 @@ def parse_sample_xsec(cfgfile):
                     raise RuntimeError(f"Inconsistent entries for sample {samp}")
                 xsec_dict[samp] = xsec
     return xsec_dict
+
 
 def add_weights(file, xsec, lumi=1000., treename='Events'):
     """ Adds cross-section weights to a merged ROOT file if not already present. """
@@ -276,65 +280,73 @@ def add_weights(file, xsec, lumi=1000., treename='Events'):
     f.Close()
 
 def run_add_weights():
-    """ Merges, applies weights, and combines physics processes per sample. """
+    '''
+    Merges, applies weights, and combines physics processes per sample.
+    '''
+
+    # read cross-sections
     xsec_dict = parse_sample_xsec(args.xsec_file)
 
+    # read metadata
     with open(args.jobs_dir + "/metadata.json", 'r') as file:
         data = json.load(file)
-
     base_output_dir = data["output_dir"]
     dataset_type = data["type"]
     year = data["year"]
     
+    # loop over samples
     sample_dirs = {sample: [] for sample in data["sample_names"]}
-
     for sample in sample_dirs:
         sample_path = os.path.join(base_output_dir, dataset_type, year, sample)
-        if not os.path.isdir(sample_path):
-            continue
+        if not os.path.isdir(sample_path): continue
 
-        physics_process_dirs = [
+        # loop over processes for this sample
+        physics_process_dirs = ([
             d.name for d in Path(sample_path).iterdir() if d.is_dir()
-        ]
-
+        ])
         for physics_process in physics_process_dirs:
+
+            # find cross-section for this process
             if physics_process not in xsec_dict:
                 print(f"Process {physics_process} not found in xsec file, skipping.")
                 continue
-
             xsec = xsec_dict[physics_process]
+
+            # find all files for this process
             process_dir = os.path.join(sample_path, physics_process)
             root_files = list(Path(process_dir).glob("*.root"))
-
             if not root_files:
                 print(f"No ROOT files found in {process_dir}, skipping...")
                 continue
 
-            # Step 1: Merge split files for this process
+            # merge split files for this process
             merged_file = os.path.join(process_dir, "merged_tree.root")
             if len(root_files) > 1:
                 merge_cmd = f"haddnano.py {merged_file} {' '.join(map(str, root_files))}"
                 print(f"Merging {len(root_files)} files into {merged_file}")
                 subprocess.run(merge_cmd, shell=True, check=True)
-            else:
-                merged_file = str(root_files[0])
+            else: merged_file = str(root_files[0])
 
-            # Step 2: Add weights to the merged file
+            # add weights to the merged file
             weighted_file = os.path.join(process_dir, "weighted_tree.root")
-            subprocess.run(f"cp {merged_file} {weighted_file}", shell=True)  # Copy before modifying
-            add_weights(weighted_file, xsec)  # Apply weight to merged file
+            subprocess.run(f"cp {merged_file} {weighted_file}", shell=True)
+            add_weights(weighted_file, xsec)
             sample_dirs[sample].append(weighted_file)
 
-    # Step 3: Merge weighted process files per sample
+    # merge weighted process files per sample
     for sample, process_files in sample_dirs.items():
         if len(process_files) > 1:
-            final_merged_file = os.path.join(base_output_dir, dataset_type, year, sample, f"{sample}_final_merged.root")
+            # if more than 1 file, need to merge them
+            final_merged_file = os.path.join(base_output_dir,
+              dataset_type, year, sample, f"{sample}_final_merged.root")
             merge_cmd = f"haddnano.py {final_merged_file} {' '.join(process_files)}"
             print(f"Merging {len(process_files)} weighted files into {final_merged_file}")
             subprocess.run(merge_cmd, shell=True, check=True)
         elif process_files:
-            final_merged_file = process_files[0]  # If only one file, it's already final
+            # if only 1 file, it is already final
+            final_merged_file = process_files[0]
             print(f"Only one file for {sample}, no need to merge.")
+
 
 def merge_output_files():
     '''
@@ -484,6 +496,7 @@ def main():
         sys.exit(0)
    
     if args.post:
+        run_add_weights()
         merge_output_files()
         sys.exit(0)   
     

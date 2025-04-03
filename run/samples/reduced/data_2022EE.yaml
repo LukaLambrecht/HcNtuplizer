@@ -1,0 +1,19 @@
+# 2022 Era E 6.1/fb Golden JSON
+# 2022 Era F 18.4/fb Golden JSON
+# 2022 Era G 3.2/fb Golden JSON
+
+MuonEG:
+  - /MuonEG/Run2022E-22Sep2023-v1/NANOAOD
+  - /MuonEG/Run2022F-22Sep2023-v1/NANOAOD
+  - /MuonEG/Run2022G-22Sep2023-v1/NANOAOD
+
+EGamma:
+  - /EGamma/Run2022E-22Sep2023-v1/NANOAOD
+  - /EGamma/Run2022F-22Sep2023-v1/NANOAOD
+  - /EGamma/Run2022G-22Sep2023-v2/NANOAOD
+
+Muon:
+  - /Muon/Run2022E-22Sep2023-v1/NANOAOD
+  - /Muon/Run2022F-22Sep2023-v2/NANOAOD
+  - /Muon/Run2022G-22Sep2023-v1/NANOAOD
+  
