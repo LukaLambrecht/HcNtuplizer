@@ -1,4 +1,10 @@
-python/producers/__pycache__/
-python/helpers/__pycache__/
-run/jobs*/
-run/__pycache__/
+# ignore cached and compiled python code
+**__pycache__
+*.pyc
+
+# ignore job output directories
+run/jobs*
+
+# ignore the currently selected sample lists
+run/samples/*.yaml
+run/samples/*.conf
