@@ -14,3 +14,7 @@ keep luminosityBlock
 keep PV_*
 keep genWeight
 keep Rho_*
+keep *DStarMeson*
+keep *DZeroMeson*
+keep *DsMeson*
+keep cFragmentation*
