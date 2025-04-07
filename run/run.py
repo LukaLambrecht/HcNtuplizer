@@ -545,7 +545,7 @@ def main():
         sys.exit(0)
    
     if args.post:
-        #run_add_weights()
+        run_add_weights()
         merge_output_files()
         sys.exit(0)   
     
