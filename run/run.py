@@ -15,7 +15,7 @@ import yaml
 import helpers
 
 
-## parse arguments
+# parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--year', type=str, help='Year to run', default="2022")
 parser.add_argument('--output', type=str, help='Output dir', default = "/eos/user/i/iparaske/HcTrees/")
@@ -33,6 +33,18 @@ golden_json = {
     '2023': 'Cert_Collisions2023_366442_370790_Golden.json',
     '2023BPix': 'Cert_Collisions2023_366442_370790_Golden.json'
 }
+
+# for merging: specifiy whether to use the standard or the custom haddnano
+#haddnano = 'haddnano.py' # standard built-in haddnano (available after doing cmsenv)
+haddnano = os.path.join(os.path.dirname(__file__), 'haddnano.py') # custom haddnano
+if haddnano!='haddnano.py':
+    if not os.path.exists(haddnano):
+        msg = f'Requested to use custom haddnano script "{haddnano}",'
+        msg += ' but it does not seem to exist.'
+        raise Exception(msg)
+    else:
+        msg = f'Note: using non-standard haddnano script "{haddnano}" for merging.'
+        print(msg)
 
 
 def create_metadata_json():
@@ -154,10 +166,11 @@ def write_condor_submit(jobids_file):
     Create the submit.sh file in the job directory
     '''
     cmssw_base = os.environ['CMSSW_BASE']
-    jobs_dir_path =os.getcwd() + "/" + args.jobs_dir 
+    jobs_dir_path = os.getcwd() + "/" + args.jobs_dir 
     
-    condor_submit_file = open(args.jobs_dir + "/submit.sh","w")
-    condor_submit_file.write('''
+    condor_submit_file = os.path.join(args.jobs_dir, 'submit.sh')
+    f = open(condor_submit_file, 'w')
+    f.write('''
 executable = condor_exec.sh
 
 arguments = $(jobid) ''' + cmssw_base + ''' ''' + jobs_dir_path  + ''' 
@@ -173,8 +186,8 @@ JobBatchName = HcTrees_''' + args.type + '''_''' + args.year + '''
 +JobFlavour = "tomorrow"
 
 queue jobid from ''' + jobids_file)
-
-    condor_submit_file.close()
+    f.close()
+    print(f'Created condor submit file {condor_submit_file}.')
 
 
 def create_condor_submit():
@@ -282,7 +295,20 @@ def add_weights(file, xsec, lumi=1000., treename='Events'):
 def run_add_weights():
     '''
     Merges, applies weights, and combines physics processes per sample.
+    Note: safe to run on data, nothing will happen because the sample is skipped
+          if the corresponding cross-section is not found in the provided config.
+    Expected file structure before this operation:
+      <output directory>/<data type>/<year>/<sample>/<process>/<root files>
+    File structure after this operation:
+      <output directory>/<data type>/<year>/<sample>/<process>/merged_tree.root (merged root file)
+        (note: merged_tree.root is not created if there were no or only one file to start from).
+      <output directory>/<data type>/<year>/<sample>/<process>/weighted_tree.root (copy of above with added weights)
+        (note: weighted_tree.root is not created if there were no files to start from).
+      <output directory>/<data type>/<year>/<sample>/<sample>_final_merged.root
+        (note: <sample>_final_merged.root is not created if there were no or only one process to start from).
     '''
+
+    print('Now running run_add_weights')
 
     # read cross-sections
     xsec_dict = parse_sample_xsec(args.xsec_file)
@@ -295,8 +321,10 @@ def run_add_weights():
     year = data["year"]
     
     # loop over samples
+    print('Merging files per process...')
     sample_dirs = {sample: [] for sample in data["sample_names"]}
     for sample in sample_dirs:
+        print(f'  - Sample: {sample}')
         sample_path = os.path.join(base_output_dir, dataset_type, year, sample)
         if not os.path.isdir(sample_path): continue
 
@@ -305,10 +333,11 @@ def run_add_weights():
             d.name for d in Path(sample_path).iterdir() if d.is_dir()
         ])
         for physics_process in physics_process_dirs:
+            print(f'    - Process: {physics_process}')
 
             # find cross-section for this process
             if physics_process not in xsec_dict:
-                print(f"Process {physics_process} not found in xsec file, skipping.")
+                print(f"      Process {physics_process} not found in xsec file, skipping.")
                 continue
             xsec = xsec_dict[physics_process]
 
@@ -316,14 +345,14 @@ def run_add_weights():
             process_dir = os.path.join(sample_path, physics_process)
             root_files = list(Path(process_dir).glob("*.root"))
             if not root_files:
-                print(f"No ROOT files found in {process_dir}, skipping...")
+                print(f"      No ROOT files found in {process_dir}, skipping.")
                 continue
 
             # merge split files for this process
             merged_file = os.path.join(process_dir, "merged_tree.root")
             if len(root_files) > 1:
-                merge_cmd = f"haddnano.py {merged_file} {' '.join(map(str, root_files))}"
-                print(f"Merging {len(root_files)} files into {merged_file}")
+                merge_cmd = f"{haddnano} {merged_file} {' '.join(map(str, root_files))}"
+                print(f"      Merging {len(root_files)} files into {merged_file}")
                 subprocess.run(merge_cmd, shell=True, check=True)
             else: merged_file = str(root_files[0])
 
@@ -334,18 +363,21 @@ def run_add_weights():
             sample_dirs[sample].append(weighted_file)
 
     # merge weighted process files per sample
+    print('Merging processes per sample...')
     for sample, process_files in sample_dirs.items():
+        print(f'  - Sample: {sample}')
         if len(process_files) > 1:
             # if more than 1 file, need to merge them
             final_merged_file = os.path.join(base_output_dir,
               dataset_type, year, sample, f"{sample}_final_merged.root")
-            merge_cmd = f"haddnano.py {final_merged_file} {' '.join(process_files)}"
-            print(f"Merging {len(process_files)} weighted files into {final_merged_file}")
+            merge_cmd = f"{haddnano} {final_merged_file} {' '.join(process_files)}"
+            print(f"  Merging {len(process_files)} weighted files into {final_merged_file}")
             subprocess.run(merge_cmd, shell=True, check=True)
-        elif process_files:
+        elif len(process_files) == 1:
             # if only 1 file, it is already final
-            final_merged_file = process_files[0]
             print(f"Only one file for {sample}, no need to merge.")
+            pass
+        else: pass
 
 
 def merge_output_files():
@@ -469,16 +501,22 @@ def check_job_status():
     return all_completed, jobids
 
 def resubmit():
-    # Ensure check_job_status accepts 'args' as an argument
-    jobids = check_job_status()[1]['failed']  
-    
-    jobids_file = os.path.join(args.jobs_dir, 'resubmit.txt')
+    '''
+    Resubmit failed jobs
+    '''
 
+    # get the job ids of failed jobs
+    jobids = check_job_status()[1]['failed']
+    
+    # write the failed job ids to the resubmit file
+    jobids_file = os.path.join(args.jobs_dir, 'resubmit.txt')
     with open(jobids_file, 'w') as f:
         f.write('\n'.join(jobids))
+    print(f'Failed job ids written to {jobids_file}.')
 
-    # Pass the correct absolute path to write_condor_submit
-    write_condor_submit(jobids_file=jobids_file)
+    # make a new condor submit file with the failed job ids
+    write_condor_submit(jobids_file = os.path.abspath(jobids_file))
+
 
 def main():
 
