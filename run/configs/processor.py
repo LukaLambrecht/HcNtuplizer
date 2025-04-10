@@ -54,14 +54,14 @@ p = PostProcessor(
     outputDir = output_dir, 
     inputFiles = files, 
     modules=[
-        JetVMAPProducer(year,dataset_type),
-        jetJERCProducer(year, era_data, dataset_type),
-        eleScaleRes(year, dataset_type),
+        #JetVMAPProducer(year,dataset_type), # disable for 2018 case study
+        #jetJERCProducer(year, era_data, dataset_type), # disable for 2018 case study
+        #eleScaleRes(year, dataset_type), # disable for 2018 case study
         #muonScaleRes(year, dataset_type), # unresolved symbol lookup error
         HtoZZto4LProducer(year, dataset_type, sample),
         PileupWeightProducer(year, dataset_type),
-        ElectronSFProducer(year, dataset_type), 
-        MuonSFProducer(year, dataset_type),
+        #ElectronSFProducer(year, dataset_type), # disable for 2018 case study
+        #MuonSFProducer(year, dataset_type), # disable for 2018 case study
             ],
     branchsel=keep_and_drop_input_branches,
     outputbranchsel=keep_and_drop_output_branches,

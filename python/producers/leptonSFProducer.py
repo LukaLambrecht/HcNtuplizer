@@ -7,12 +7,23 @@ ROOT.PyConfig.IgnoreCommandLineOptions = True
 from PhysicsTools.NanoAODTools.postprocessing.framework.eventloop import Module
 
 
-era_dict = {"2022": '2022_Summer22', "2022EE": '2022_Summer22EE', "2023": '2023_Summer23', "2023BPix": '2023_Summer23BPix'}
-key_dict = {"2022":     '2022Re-recoBCD',
-            "2022EE":   '2022Re-recoE+PromptFG',
-            "2023":     '2023PromptC',
-            "2023BPix": '2023PromptD'
-            }
+era_dict = {
+  "2016APV": '2016preVFP_UL',
+  "2016": '2016postVFP_UL',
+  "2017": '2017_UL',
+  "2018": '2018_UL',
+  "2022": '2022_Summer22',
+  "2022EE": '2022_Summer22EE',
+  "2023": '2023_Summer23',
+  "2023BPix": '2023_Summer23BPix'
+}
+
+key_dict = {
+  "2022": '2022Re-recoBCD',
+  "2022EE": '2022Re-recoE+PromptFG',
+  "2023": '2023PromptC',
+  "2023BPix": '2023PromptD'
+}
 
 class ElectronSFProducer(Module, object):
 
@@ -20,10 +31,10 @@ class ElectronSFProducer(Module, object):
         self.year = year
         self.dataset_type = dataset_type
         self.era = era_dict[self.year]
-        #self.path=f'{self.year}Re-recoBCD'
-        # correction_file = f'/cvmfs/cms.cern.ch/rsync/cms-nanoAOD/jsonpog-integration/POG/EGM/{self.era}/electron.json.gz'
-        correction_file = f'../../data/ElectronSF/{self.year}/electron.json.gz'
-        self.corr = correctionlib.CorrectionSet.from_file(correction_file)['Electron-ID-SF']
+        #correction_file = f'../../data/ElectronSF/{self.year}/electron.json.gz'
+        correction_file = f'/cvmfs/cms.cern.ch/rsync/cms-nanoAOD/jsonpog-integration/POG/EGM/{self.era}/electron.json.gz'
+        correction_key = 'UL-Electron-ID-SF' if self.era.endswith('UL') else 'Electron-ID-SF'
+        self.corr = correctionlib.CorrectionSet.from_file(correction_file)[correction_key]
 
     def get_sf(self, sf_type, lep):
         if abs(lep.pdgId) != 11:

@@ -194,7 +194,61 @@ class HtoZZto4LProducer(Module):
 
         passTrigger = False 
         out_data = {}
-        if self.year == "2022" or self.year == "2022EE" :
+        if self.year == "2016" or self.year == "2016APV":
+            passSingleEle = (event.HLT_Ele25_eta2p1_WPTight
+                             or event.HLT_Ele27_WPTight
+                             or event.HLT_Ele27_eta2p1_WPLoose_Gsf)
+            passSingleMu = (event.HLT_IsoMu20 
+                            or event.HLT_IsoMu22)
+            passDiEle = (event.HLT_Ele17_Ele12_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_DoubleEle33_CaloIdL_GsfTrkIdVL)
+            passDiMu = (event.HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL
+                or event.HLT_Mu17_TrkIsoVVL_TkMu8_TrkIsoVVL)
+            passMuEle = (event.HLT_Mu8_TrkIsoVVL_Ele17_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu17_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu23_TrkIsoVVL_Ele8_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL
+                or event.HLT_DiMu9_Ele9_CaloIdL_TrackIdL)
+            passTriEle = event.HLT_Ele16_Ele12_Ele8_CaloIdL_TrackIdL
+            passTriMu = event.HLT_TripleMu_12_10_5
+        elif self.year == "2017":
+            passSingleEle = (event.HLT_Ele35_WPTight_Gsf
+                or event.HLT_Ele38_WPTight_Gsf
+                or event.HLT_Ele40_WPTight_Gsf)
+            passSingleMu = event.HLT_IsoMu27
+            passDiEle = (event.HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_DoubleEle33_CaloIdL_MW)
+            passDiMu = (event.HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass3p8
+                or event.HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass8)
+            passMuEle = (event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_DiMu9_Ele9_CaloIdL_TrackIdL_DZ
+                or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL
+                or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL_DZ)
+            passTriEle = event.HLT_Ele16_Ele12_Ele8_CaloIdL_TrackIdL
+            passTriMu = (event.HLT_TripleMu_10_5_5_DZ
+                or event.HLT_TripleMu_12_10_5)
+        elif self.year == "2018":
+            passSingleEle = event.HLT_Ele32_WPTight_Gsf
+            passSingleMu = event.HLT_IsoMu24
+            passDiEle = (event.HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_DoubleEle25_CaloIdL_MW)
+            passDiMu = event.HLT_Mu17_TrkIsoVVL_Mu8_TrkIsoVVL_DZ_Mass3p8
+            passMuEle = (event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL
+                or event.HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_Mu12_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_Mu23_TrkIsoVVL_Ele12_CaloIdL_TrackIdL_IsoVL_DZ
+                or event.HLT_DiMu9_Ele9_CaloIdL_TrackIdL_DZ
+                or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL_DZ)
+            passTriEle = False
+            passTriMu = (event.HLT_TripleMu_10_5_5_DZ
+                or event.HLT_TripleMu_12_10_5)
+        elif( self.year == "2022" or self.year == "2022EE" ):
             # (note: checked that these are unprescaled in run 359751)
             passSingleEle = event.HLT_Ele30_WPTight_Gsf
             passSingleMu = event.HLT_IsoMu24
@@ -209,7 +263,7 @@ class HtoZZto4LProducer(Module):
                          or event.HLT_Mu8_DiEle12_CaloIdL_TrackIdL_DZ)
             passTriEle = False
             passTriMu = event.HLT_TripleMu_10_5_5_DZ or event.HLT_TripleMu_12_10_5
-        elif self.year == "2023" or self.year == "2023BPix" :
+        elif( self.year == "2023" or self.year == "2023BPix" ):
             # note: checked that these are unprescaled.
             # reference twikis:
             # - https://twiki.cern.ch/twiki/bin/view/CMS/EgHLTRunIIISummary
@@ -222,7 +276,7 @@ class HtoZZto4LProducer(Module):
             passTriEle = False
             passTriMu = event.HLT_TripleMu_10_5_5_DZ or event.HLT_TripleMu_12_10_5
         else:
-            print(f"Year {self.year} not found")
+            raise Exception(f"Year {self.year} not found")
 
         if self.isMC or self.sample == "any" :
             passTrigger = (passDiEle or passDiMu or passMuEle or

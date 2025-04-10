@@ -17,17 +17,22 @@ import helpers
 
 # parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('--year', type=str, help='Year to run', default="2022")
-parser.add_argument('--output', type=str, help='Output dir', default = "/eos/user/i/iparaske/HcTrees/")
-parser.add_argument('--type', type=str, help='mc or data', default = "mc", choices=['mc', 'data'])
-parser.add_argument('--post',help='Merge output files',action='store_true')
-parser.add_argument('-n',type=int, help='Number of files per job', default=10)
-parser.add_argument('--xsec-file', type=str, help='xsec file', default = "samples/xsec.conf")
-parser.add_argument('--check-status', help='Checks jobs status', action='store_true')
+parser.add_argument('-s', '--samplelist', help='List of samples to process', default=None)
+parser.add_argument('-o', '--output', help='Output dir', default=None)
+parser.add_argument('-y', '--year', type=str, help='Year to run', required=True)
+parser.add_argument('-t', '--dtype', type=str, help='Data type (mc or data)', default = "mc", choices=['mc', 'data'])
+parser.add_argument('-n', type=int, help='Number of files per job', default=10)
+parser.add_argument('--post', help='Merge output files', default=False, action='store_true')
+parser.add_argument('--xsec-file', type=str, help='Cross-section file', default=None)
+parser.add_argument('--check-status', help='Check jobs status', action='store_true')
 parser.add_argument('--resubmit', help='Resubmit failed jobs', action='store_true')
 args = parser.parse_args()
 
 golden_json = {
+    '2016APV': 'Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt',
+    '2016': 'Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt',
+    '2017': 'Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt',
+    '2018': 'Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt',
     '2022': 'Cert_Collisions2022_355100_362760_Golden.json',
     '2022EE': 'Cert_Collisions2022_355100_362760_Golden.json',
     '2023': 'Cert_Collisions2023_366442_370790_Golden.json',
@@ -49,15 +54,21 @@ if haddnano!='haddnano.py':
 
 def create_metadata_json():
     # write metadata json file
+
+    # check sample list
+    if args.samplelist is None:
+        msg = 'A sample list must be provided.'
+        raise Exception(msg)
+    if not os.path.exists(args.samplelist):
+        msg = f'Provided sample list {args.samplelist} does not exist.'
+        raise Exception(msg)
     
-    dataset_type = args.type
+    dataset_type = args.dtype
     jobs_dir = "jobs_" + dataset_type + "_" + args.year
     year = args.year
     
     # read samples yaml file
-    samples_yaml_file = (os.environ['CMSSW_BASE']
-      + "/src/PhysicsTools/HcNtuplizer/run/samples/"
-      + dataset_type + "_" + year + ".yaml")
+    samples_yaml_file = args.samplelist
     print(f'Reading sample list {samples_yaml_file}')
     with open(samples_yaml_file, 'r') as file:
         samples = yaml.safe_load(file)
@@ -115,9 +126,17 @@ def create_metadata_json():
     json_content["jobs_dir"] = args.jobs_dir
     json_content["year"] = args.year    
     json_content["type"] = dataset_type
-    if dataset_type == "data":  
-        json_content["golden_json"] = (os.environ['CMSSW_BASE']
-          + "/src/PhysicsTools/HcNtuplizer/data/JSON/" + golden_json[args.year])
+    if dataset_type == "data":
+        # set path to golden json file
+        if args.year not in golden_json.keys():
+            msg = f'Year {args.year} not found in golden json dict.'
+            raise Exception(msg)
+        golden_json_file = (os.environ['CMSSW_BASE']
+          + "/src/PhysicsTools/HcNtuplizer/data/JSON/"
+          + golden_json[args.year])
+        if not os.path.exists(golden_json_file):
+            msg = f'Golden json file {golden_json_file} does not exist.'
+            raise Exception(msg)
     else: json_content["golden_json"] = None
     json_content["sample_names"] = []
     json_content["physics_processes"] = []
@@ -182,7 +201,7 @@ output = log/$(jobid).out
 error = log/$(jobid).err
 log = log/$(jobid).log
 
-JobBatchName = HcTrees_''' + args.type + '''_''' + args.year + '''
+JobBatchName = HcTrees_''' + args.dtype + '''_''' + args.year + '''
 +JobFlavour = "tomorrow"
 
 queue jobid from ''' + jobids_file)
@@ -215,39 +234,36 @@ def create_condor_submit():
 
 def parse_sample_xsec(cfgfile):
     """ Parses the cross-section file and returns a dictionary. """
+
+    # check provided config file
+    if cfgfile is None:
+        msg = 'A config file for the cross-sections must be provided.'
+        raise Exception(msg)
+    if not os.path.exists(cfgfile):
+        msg = f'Provided xsec config file {cfgfile} does not exist.'
+        raise Exception(msg)
+
     xsec_dict = {}
+    lines = []
+    # read lines (remove comments and empty lines)
     with open(cfgfile) as f:
         for l in f:
-            l = l.strip()
-            if not l or l.startswith('#'):
-                continue
-            pieces = l.split()
-            samp = None
-            xsec = None
-            isData = False
-            for s in pieces:
-                if '/MINIAOD' in s or '/NANOAOD' in s:
-                    samp = s.split('/')[1]
-                    if '/MINIAODSIM' not in s and '/NANOAODSIM' not in s:
-                        isData = True
-                        break
-                else:
-                    try:
-                        xsec = float(s)
-                    except ValueError:
-                        try:
-                            import numexpr
-                            xsec = numexpr.evaluate(s).item()
-                        except:
-                            pass
-            if samp is None:
-                print(f"Ignore line:\n{l}")
-            elif not isData and xsec is None:
-                print(f"Cannot find cross section:\n{l}")
-            else:
-                if samp in xsec_dict and xsec_dict[samp] != xsec:
-                    raise RuntimeError(f"Inconsistent entries for sample {samp}")
-                xsec_dict[samp] = xsec
+            l = l.strip(' \n\t')
+            if len(l)==0 or l.startswith('#'): continue
+            lines.append(l)
+    # parse each line
+    for line in lines:
+        pieces = line.split()
+        if len(pieces)!=2:
+            msg = 'WARNING in parsing cross-section dict:'
+            msg += f' could not parse line {line}, skipping.'
+            print(msg)
+            continue
+        xsec = float(pieces[0])
+        sample = pieces[1]
+        if sample in xsec_dict.keys() and xsec_dict[sample] != xsec:
+            raise RuntimeError(f"Inconsistent cross-sections for sample {sample}")
+        xsec_dict[sample] = xsec
     return xsec_dict
 
 
@@ -308,9 +324,8 @@ def run_add_weights():
         (note: <sample>_final_merged.root is not created if there were no or only one process to start from).
     '''
 
-    print('Now running run_add_weights')
-
     # read cross-sections
+    print(f'Using following cross-section file: {args.xsec_file}')
     xsec_dict = parse_sample_xsec(args.xsec_file)
 
     # read metadata
@@ -343,7 +358,10 @@ def run_add_weights():
 
             # find all files for this process
             process_dir = os.path.join(sample_path, physics_process)
-            root_files = list(Path(process_dir).glob("*.root"))
+            root_files = ([os.path.join(process_dir, f) for f in os.listdir(process_dir)
+                           if( f.endswith('.root')
+                           and f!='merged_tree.root'
+                           and f!='weighted_tree.root' )])
             if not root_files:
                 print(f"      No ROOT files found in {process_dir}, skipping.")
                 continue
@@ -532,7 +550,7 @@ def resubmit():
 def main():
 
     # set name for jobs directory
-    jobs_dir = "jobs_" + args.type + "_" + args.year
+    jobs_dir = "jobs_" + args.dtype + "_" + args.year
     args.jobs_dir = jobs_dir
 
     # handle special cases
@@ -547,10 +565,13 @@ def main():
     if args.post:
         run_add_weights()
         merge_output_files()
-        sys.exit(0)   
+        sys.exit(0) 
     
-    # check output directory 
+    # check job directory and output directory 
     helpers.check_if_dir_exists(jobs_dir)
+    if args.output is None:
+        msg = 'An output directory must be provided.'
+        raise Exception(msg)
     helpers.check_if_dir_exists(args.output)
     print("Will write output trees to " + args.output)
     print("Number of files per job: " + str(args.n))
