@@ -137,6 +137,7 @@ def create_metadata_json():
         if not os.path.exists(golden_json_file):
             msg = f'Golden json file {golden_json_file} does not exist.'
             raise Exception(msg)
+        json_content["golden_json"] = golden_json_file
     else: json_content["golden_json"] = None
     json_content["sample_names"] = []
     json_content["physics_processes"] = []

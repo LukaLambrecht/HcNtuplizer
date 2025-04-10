@@ -452,7 +452,8 @@ class HtoZZto4LProducer(Module):
                 and abs(el.sip3d) < 4 ):
                 el._wp_ID = 'wp90iso'
                 
-                ## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
+                # for Run 3:
+                '''## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
                 # todo: check if this is still needed and if there isn't a cleaner solution
                 if abs(el.etaSC) < 0.8:
                     if el.pt < 10:
@@ -468,7 +469,25 @@ class HtoZZto4LProducer(Module):
                     if el.pt < 10:
                         if el.mvaIso < 0.9443653660: continue
                     else:
-                        if el.mvaIso < -0.5169136775: continue                      
+                        if el.mvaIso < -0.5169136775: continue'''
+
+                # temporary replacement or Run 2 (2018 case study):
+                ## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
+                if abs(el.etaSC) < 0.8:
+                    if el.pt < 10:
+                        if el.mvaFall17V2Iso < 0.9128577458: continue
+                    else:
+                        if el.mvaFall17V2Iso < 0.1559788054: continue
+                elif 0.8 < abs(el.etaSC) < 1.479:
+                    if el.pt < 10:
+                        if el.mvaFall17V2Iso < 0.9056792368: continue
+                    else:
+                        if el.mvaFall17V2Iso < 0.0273863727: continue                    
+                else: # |el.etaSC| > 1.479
+                    if el.pt < 10:
+                        if el.mvaFall17V2Iso < 0.9439440575: continue
+                    else:
+                        if el.mvaFall17V2Iso < -0.5532483665: continue                
                                     
                 event.selectedElectrons.append(el)
 
