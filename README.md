@@ -8,7 +8,7 @@ It is essentially central NanoAOD, just with some extra branches added for recon
 # How to setup
 Download and run the installation script as follows:
 ```
-wget https://raw.githubusercontent.com/LukaLambrecht/HcNano/refs/heads/main/setup.sh
+wget https://raw.githubusercontent.com/LukaLambrecht/HcNtuplizer/refs/heads/dev/Run3/setup.sh
 bash setup.sh
 ```
 
