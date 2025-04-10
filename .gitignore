@@ -8,3 +8,6 @@ run/jobs*
 # ignore the currently selected sample lists
 run/samples/*.yaml
 run/samples/*.conf
+
+# ignore output folders
+**output_*

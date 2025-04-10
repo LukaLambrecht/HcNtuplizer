@@ -1,0 +1,11 @@
+[
+{
+  "name": "H_mass",
+  "variable": "H_mass",
+  "axtitle": "m(H)",
+  "unit": "GeV",
+  "xlow": 80,
+  "xhigh": 150,
+  "nbins": 70
+}
+]
