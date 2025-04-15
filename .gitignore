@@ -11,3 +11,6 @@ run/samples/*.conf
 
 # ignore output folders
 **output_*
+
+# ignore proxy
+**x509up_*

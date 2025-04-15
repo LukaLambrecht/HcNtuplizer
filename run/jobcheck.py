@@ -115,7 +115,7 @@ if __name__=='__main__':
 
     # parse command line arguments
     parser = argparse.ArgumentParser(description='Check job logs for errors.')
-    parser.add_argument('--dir', default=os.getcwd(),
+    parser.add_argument('-d', '--dir', default=os.getcwd(),
                         help='Directory to scan for files (default: cwd)')
     parser.add_argument('--starting_tag', default='###starting###',
                         help='Starting tag, default is "###starting###".')
