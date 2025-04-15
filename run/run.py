@@ -17,8 +17,8 @@ import helpers
 
 # parse arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-s', '--samplelist', help='List of samples to process', required=True)
-parser.add_argument('-o', '--output', help='Output dir', required=True)
+parser.add_argument('-s', '--samplelist', help='List of samples to process', default=None)
+parser.add_argument('-o', '--output', help='Output dir', default=None)
 parser.add_argument('-y', '--year', type=str, help='Year to run', required=True)
 parser.add_argument('-t', '--dtype', type=str, help='Data type (mc or data)', choices=['mc', 'data'], required=True)
 parser.add_argument('-n', '--files_per_job', type=int, help='Number of files per job', default=10)
@@ -30,6 +30,8 @@ parser.add_argument('--resubmit', help='Resubmit failed jobs', action='store_tru
 args = parser.parse_args()
 
 # additional argument parsing
+if args.samplelist is not None: args.samplelist = os.path.abspath(samplelist)
+if args.output is not None: args.output = os.path.abspath(output)
 if args.proxy is not None: args.proxy = os.path.abspath(args.proxy)
 
 # set golden json
