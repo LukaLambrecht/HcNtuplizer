@@ -35,6 +35,7 @@ class Zcandidate:
         self.eta = sumP4(self.lep1, self.lep2).Eta()
         self.phi = sumP4(self.lep1, self.lep2).Phi()
         self.mass = sumP4(self.lep1, self.lep2).M()
+        self.is_onshell = False
 
 class ZZcandidate:
 
@@ -45,7 +46,6 @@ class ZZcandidate:
         self.eta = sumP4(self.Z1, self.Z2).Eta()
         self.phi = sumP4(self.Z1, self.Z2).Phi()
         self.mass = sumP4(self.Z1, self.Z2).M()
-        #self.mass2 = sumP4(self.Z1, self.Z2).M() seems to be a bug? to see if it is used anywhere...
 
 class HtoZZto4LProducer(Module):
     
@@ -192,8 +192,10 @@ class HtoZZto4LProducer(Module):
 
     def _select_triggers(self, event):
 
-        passTrigger = False 
-        out_data = {}
+        # initialize passTrigger to False (default),
+        # later set to True if specific conditions are met
+        passTrigger = False
+
         if self.year == "2016" or self.year == "2016APV":
             passSingleEle = (event.HLT_Ele25_eta2p1_WPTight
                              or event.HLT_Ele27_WPTight
@@ -430,11 +432,13 @@ class HtoZZto4LProducer(Module):
         muons = Collection(event, "Muon")
         for mu in muons:
             
-            passMuID = mu.isPFcand or (mu.highPtId > 0 and mu.pt > 200)
             if( mu.pt > 5 and abs(mu.eta) < 2.4
-                and mu.dxy < 0.5 and mu.dz < 1
-                and abs(mu.sip3d) < 4 and mu.pfRelIso03_all < 0.35
-                and passMuID and (mu.isGlobal or (mu.isTracker and mu.nStations > 0)) ):
+                and abs(mu.dxy) < 0.5
+                and abs(mu.dz) < 1
+                and abs(mu.sip3d) < 4
+                and mu.pfRelIso03_all < 0.35
+                and (mu.isPFcand or (mu.highPtId > 0 and mu.pt > 200))
+                and (mu.isGlobal or (mu.isTracker and mu.nStations > 0)) ):
                 mu._wp_ID = 'TightID'
                 mu._wp_Iso = 'LoosePFIso'
                 event.selectedMuons.append(mu)
@@ -448,14 +452,15 @@ class HtoZZto4LProducer(Module):
         for el in electrons:
             el.etaSC = el.eta + el.deltaEtaSC
             if( el.pt > 7 and abs(el.eta) < 2.5
-                and el.dxy < 0.5 and el.dz < 1
+                and abs(el.dxy) < 0.5
+                and abs(el.dz) < 1
                 and abs(el.sip3d) < 4 ):
                 el._wp_ID = 'wp90iso'
                 
                 # for Run 3:
-                '''## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
+                ## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
                 # todo: check if this is still needed and if there isn't a cleaner solution
-                if abs(el.etaSC) < 0.8:
+                '''if abs(el.etaSC) < 0.8:
                     if el.pt < 10:
                         if el.mvaIso < 0.9044286167: continue
                     else:
@@ -465,13 +470,18 @@ class HtoZZto4LProducer(Module):
                         if el.mvaIso < 0.9094166886: continue
                     else:
                         if el.mvaIso < 0.0759172100: continue                  
-                else: # |el.etaSC| > 1.479
+                else:
                     if el.pt < 10:
                         if el.mvaIso < 0.9443653660: continue
                     else:
                         if el.mvaIso < -0.5169136775: continue'''
 
-                # temporary replacement or Run 2 (2018 case study):
+                # temporary replacement for Run 2 central samples (2018 case study).
+                # note: custom samples for 2018 seem to contain the mvaIso branch
+                #       (instead of the mvaFall17V2Iso branch); probably an issue with the GT.
+                #       not sure if the branch was simply renamed, or it's actually a different MVA.
+                #       for now, just use the Run 3 version for custom 2018 samples,
+                #       should hopefully not make a big difference.
                 ## https://github.com/CJLST/ZZAnalysis/blob/Run3/NanoAnalysis/python/getEleBDTCut.py#L22-L31
                 if abs(el.etaSC) < 0.8:
                     if el.pt < 10:
@@ -483,11 +493,11 @@ class HtoZZto4LProducer(Module):
                         if el.mvaFall17V2Iso < 0.9056792368: continue
                     else:
                         if el.mvaFall17V2Iso < 0.0273863727: continue                    
-                else: # |el.etaSC| > 1.479
+                else:
                     if el.pt < 10:
                         if el.mvaFall17V2Iso < 0.9439440575: continue
                     else:
-                        if el.mvaFall17V2Iso < -0.5532483665: continue                
+                        if el.mvaFall17V2Iso < -0.5532483665: continue
                                     
                 event.selectedElectrons.append(el)
 
