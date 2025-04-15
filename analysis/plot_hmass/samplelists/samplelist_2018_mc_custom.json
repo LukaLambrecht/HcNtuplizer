@@ -1,0 +1,7 @@
+{
+  "qqZZ": ["/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/mc/2018/merged/qqZZ_final_merged.root"],
+  "VBF": ["/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/mc/2018/merged/VBF_final_merged.root"],
+  "ggH": ["/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/mc/2018/merged/ggH_final_merged.root"],
+  "Hb": ["/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/mc/2018/merged/Hb_final_merged.root"],
+  "Hc": ["/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/mc/2018/merged/Hc_final_merged.root"]
+}

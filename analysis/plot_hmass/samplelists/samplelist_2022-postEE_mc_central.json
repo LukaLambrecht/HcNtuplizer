@@ -1,0 +1,6 @@
+{
+  "ggZZ": ["/eos/user/l/llambrec/hcanalysis-ntuples-central-2022-postEE/mc/2022EE/merged/ggZZ_final_merged.root"],
+  "qqZZ": ["/eos/user/l/llambrec/hcanalysis-ntuples-central-2022-postEE/mc/2022EE/merged/qqZZ_final_merged.root"],
+  "VBF": ["/eos/user/l/llambrec/hcanalysis-ntuples-central-2022-postEE/mc/2022EE/merged/VBF_final_merged.root"],
+  "ggH": ["/eos/user/l/llambrec/hcanalysis-ntuples-central-2022-postEE/mc/2022EE/merged/ggH_final_merged.root"]
+}
