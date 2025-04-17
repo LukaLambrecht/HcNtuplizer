@@ -49,6 +49,18 @@ keep_and_drop_output_branches = [line.strip() for line in keep_and_drop_output_b
 # set output directory
 output_dir = os.path.join(base_output_dir, dataset_type, year, sample, physics_process) 
 
+# copy locally accessible files to temporary directory
+# (attempt to fix errors that might be caused by jobs reading directly from eos)
+for idx, f in enumerate(files):
+    if not os.path.exists(f):
+        # for remote files, use prefetch option in PostProcessor (see below)
+        continue
+    target = '/tmp/{}'.format(f.replace('/', '_'))
+    cpcmd = f'cp {f} {target}'
+    print(cpcmd)
+    os.system(cpcmd)
+    files[idx] = target
+
 # build the PostProcessor
 p = PostProcessor(
     outputDir = output_dir, 

@@ -30,8 +30,8 @@ parser.add_argument('--resubmit', help='Resubmit failed jobs', action='store_tru
 args = parser.parse_args()
 
 # additional argument parsing
-if args.samplelist is not None: args.samplelist = os.path.abspath(samplelist)
-if args.output is not None: args.output = os.path.abspath(output)
+if args.samplelist is not None: args.samplelist = os.path.abspath(args.samplelist)
+if args.output is not None: args.output = os.path.abspath(args.output)
 if args.proxy is not None: args.proxy = os.path.abspath(args.proxy)
 
 # set golden json
@@ -336,7 +336,6 @@ def add_weights(file, xsec, lumi=1000., treename='Events'):
         print(f"xsecWeight already exists in {file}, skipping weight addition.")
     else:
         sumwgts = _get_sum(run_tree, 'genEventSumw')
-        print(sumwgts)
         if sumwgts == 0:
             raise ValueError(f"genEventSumw is zero in {file}, preventing division by zero.")
         
@@ -496,10 +495,11 @@ def merge_output_files():
             input_files = []
             for process_dir in physics_process_dirs:
                 infiles_dir = os.path.join(base_output_dir, dataset_type, year, sample, process_dir.name)
-                for root, _, files in os.walk(infiles_dir):
-                    for file in files:
-                        if file.endswith(".root"):
-                            input_files.append(os.path.join(root, file))
+                input_files.append(os.path.join(infiles_dir, '*.root'))
+                #for root, _, files in os.walk(infiles_dir):
+                #    for file in files:
+                #        if file.endswith(".root"):
+                #            input_files.append(os.path.join(root, file))
 
             # define merged output file
             output_file = os.path.join(merged_dir, f"{sample}_merged.root")
