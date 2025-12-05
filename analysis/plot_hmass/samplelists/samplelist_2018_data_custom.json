@@ -1,0 +1,8 @@
+{
+  "data": [
+    "/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/data/2018/merged/EGamma_merged.root",
+    "/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/data/2018/merged/MuonEG_merged.root",
+    "/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/data/2018/merged/SingleMuon_merged.root",
+    "/eos/user/l/llambrec/hcanalysis-ntuples-custom-2018/data/2018/merged/DoubleMuon_merged.root"
+  ]
+}

@@ -13,15 +13,14 @@ sys.path.append(topdir)
 from plotting.plot import plot
 from tools.plottools import make_hist
 from tools.variabletools import read_variables
-from tools.samplelisttools import read_sampledict
+from tools.samplelisttools import read_samplelist
 
 
 if __name__=='__main__':
 
     # read command line args
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--inputfiles', required=True, nargs='+')
-    parser.add_argument('-l', '--labels', required=True, nargs='+')
+    parser.add_argument('-i', '--samplelist', required=True, nargs='+')
     parser.add_argument('-v', '--variables', required=True)
     parser.add_argument('-o', '--outputdir', required=True)
     parser.add_argument('--weighted', default=False, action='store_true')
@@ -40,20 +39,28 @@ if __name__=='__main__':
 
     # set branches to read
     branches_to_read = variablelist
+    branches_to_read.append('nH')
     if args.weighted:
         raise Exception('Not yet implemented.')
 
     # read the input file
     events = {}
     treename = 'Events'
-    sampledict = {label: [inputfile] for label, inputfile in zip(args.labels, args.inputfiles)}
     print('Reading ntuples...')
-    events = read_sampledict(sampledict,
+    events = read_samplelist(args.samplelist,
                           mode='uproot',
                           treename=treename,
                           branches=branches_to_read,
                           entry_start=args.entry_start,
                           entry_stop=args.entry_stop)
+
+    # filter events with one H candidate
+    print('Filter on exactly 1 H candidate:')
+    for key, sample in events.items():
+        nH = sample['nH'].to_numpy()
+        mask = (nH==1).astype(bool)
+        events[key] = sample[mask]
+        print(f'  - sample {key}: {np.sum(mask)} / {len(mask)} entries')
 
     # flatten all variables
     new_events = {}
@@ -66,15 +73,31 @@ if __name__=='__main__':
     events = new_events
 
     # set colors
-    cmap = plt.get_cmap('cool')
-    crange = np.linspace(0, 1, num=len(sampledict), endpoint=True)
-    colordict = {label: cmap(crange[cidx]) for cidx, label in enumerate(args.labels)}
+    #cmap = plt.get_cmap('cool')
+    #crange = np.linspace(0, 1, num=len(sampledict), endpoint=True)
+    #colordict = {label: cmap(crange[cidx]) for cidx, label in enumerate(events.keys())}
+    colordict = {
+        'Hc': 'red',
+        'Hb': 'darkorchid',
+        'ggH': 'orchid',
+        'VBF': 'plum',
+        'qqZZ': 'dodgerblue',
+        'ggZZ': 'mediumslateblue'
+    }
 
     # set labels
-    labeldict = {label: label for label in args.labels}
+    #labeldict = {label: label for label in events.keys()}
+    labeldict = {
+        'Hc': 'H+c',
+        'Hb': 'H+b',
+        'ggH': 'H (ggH)',
+        'VBF': 'H (VBF)',
+        'ggZZ': 'ZZ (ggZZ)',
+        'qqZZ': 'ZZ (qqZZ)'
+    }
 
     # set styles
-    styledict = {label: 'step' for label in args.labels}
+    styledict = {label: 'step' for label in events.keys()}
 
     # make output directory
     if not os.path.exists(args.outputdir):

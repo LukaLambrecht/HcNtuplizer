@@ -7,5 +7,23 @@
   "xlow": 80,
   "xhigh": 150,
   "nbins": 70
+},
+{
+  "name": "H_pt",
+  "variable": "H_pt",
+  "axtitle": "$p_{T}$(H)",
+  "unit": "GeV",
+  "xlow": 0,
+  "xhigh": 150,
+  "nbins": 70
+},
+{
+  "name": "H_eta",
+  "variable": "H_eta",
+  "axtitle": "$\eta$(H)",
+  "unit": "",
+  "xlow": -2.5,
+  "xhigh": 2.5,
+  "nbins": 70
 }
 ]
